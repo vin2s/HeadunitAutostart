@@ -19,8 +19,7 @@ import androidx.core.content.ContextCompat
 class AutostartService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var screenReceiver: BroadcastReceiver? = null
-    private var launchRunnable: Runnable? = null
-    private var minimizeRunnable: Runnable? = null
+    private val pending = mutableListOf<Runnable>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -77,56 +76,65 @@ class AutostartService : Service() {
 
     private fun scheduleLaunch(reason: String) {
         val prefs = Prefs(this)
-        if (!prefs.isConfigured) return
+        val apps = prefs.targets
+        if (!prefs.enabled || apps.isEmpty()) return
         val now = System.currentTimeMillis()
         if (now - prefs.lastLaunchAt < prefs.cooldownMs) return
 
         cancelPending()
+        prefs.lastLaunchAt = now
+        scheduleNext(apps, 0)
+        Log.d(TAG, "scheduled ${apps.size} apps after $reason")
+    }
+
+    private fun scheduleNext(apps: List<TargetApp>, index: Int) {
+        if (index >= apps.size) return
+        val app = apps[index]
         val launch = Runnable {
-            val still = Prefs(this)
-            if (!still.isConfigured) return@Runnable
-            if (System.currentTimeMillis() - still.lastLaunchAt < still.cooldownMs) return@Runnable
-            val launched = AppLauncher.launch(this, still.targetPackage)
-            if (!launched) return@Runnable
-            still.lastLaunchAt = System.currentTimeMillis()
-            if (still.minimizeAfterLaunch) {
-                val minimize = Runnable { AppLauncher.goHome(this) }
-                minimizeRunnable = minimize
-                handler.postDelayed(minimize, still.minimizeDelayMs.coerceAtLeast(0L))
+            AppLauncher.launch(this, app.packageName)
+            if (app.minimizeAfterLaunch) {
+                val minimize = Runnable {
+                    AppLauncher.goHome(this)
+                    scheduleNext(apps, index + 1)
+                }
+                post(minimize, app.minimizeDelayMs)
+            } else {
+                scheduleNext(apps, index + 1)
             }
         }
-        launchRunnable = launch
-        handler.postDelayed(launch, prefs.launchDelayMs.coerceAtLeast(0L))
-        Log.d(TAG, "scheduled launch after $reason")
+        post(launch, app.launchDelayMs)
+    }
+
+    private fun post(runnable: Runnable, delayMs: Long) {
+        pending.add(runnable)
+        handler.postDelayed(runnable, delayMs.coerceAtLeast(0L))
     }
 
     private fun cancelPending() {
-        launchRunnable?.let { handler.removeCallbacks(it) }
-        minimizeRunnable?.let { handler.removeCallbacks(it) }
-        launchRunnable = null
-        minimizeRunnable = null
+        pending.forEach { handler.removeCallbacks(it) }
+        pending.clear()
     }
 
     private fun buildNotification(): Notification {
         val open = Intent(this, MainActivity::class.java)
-        val pending = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             this,
             0,
             open,
             PendingIntent.FLAG_UPDATE_CURRENT or pendingImmutableFlag()
         )
-        val prefs = Prefs(this)
-        val text = if (prefs.targetLabel.isNotBlank()) {
-            getString(R.string.notification_text, prefs.targetLabel)
-        } else {
-            getString(R.string.notification_text_generic)
+        val names = Prefs(this).targets.map { it.label.ifBlank { it.packageName } }
+        val text = when {
+            names.isEmpty() -> getString(R.string.notification_text_generic)
+            names.size == 1 -> getString(R.string.notification_text, names.first())
+            else -> getString(R.string.notification_text_many, names.size)
         }
         return NotificationCompat.Builder(this, AutostartApp.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(text)
             .setOngoing(true)
-            .setContentIntent(pending)
+            .setContentIntent(pendingIntent)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }

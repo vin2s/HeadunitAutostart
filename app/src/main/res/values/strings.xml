@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Автозапуск магнитолы</string>
-    <string name="intro">После включения или пробуждения магнитолы приложение само запустит выбранную программу и свернёт её на рабочий стол. Настройте один раз — дальше оно работает в фоне.</string>
+    <string name="intro">После включения или пробуждения магнитолы приложение по очереди запустит выбранные программы. У каждой свои паузы и сворачивание. Настройте один раз — дальше оно работает в фоне.</string>
     <string name="enable_autostart">Автозапуск включён</string>
+    <string name="apps_section">Приложения</string>
     <string name="pick_app">Выбрать приложение</string>
+    <string name="add_app">Добавить приложение</string>
+    <string name="remove_app">Удалить</string>
+    <string name="app_already_added">Это приложение уже в списке</string>
     <string name="search_apps">Поиск по названию или пакету</string>
-    <string name="target_not_selected">Приложение ещё не выбрано</string>
+    <string name="target_not_selected">Пока ничего не добавлено. Добавьте одно или несколько приложений.</string>
     <string name="target_selected">%1$s\n%2$s</string>
     <string name="launch_delay">Пауза перед запуском, секунды</string>
     <string name="minimize_after_launch">Сворачивать после запуска</string>
@@ -18,13 +22,14 @@
     <string name="battery_granted">Оптимизация батареи: отключена</string>
     <string name="battery_needed">Оптимизация батареи: желательно отключить, чтобы служба не убивалась во сне</string>
     <string name="save">Сохранить и работать в фоне</string>
-    <string name="select_app_first">Сначала выберите приложение</string>
+    <string name="select_app_first">Сначала добавьте хотя бы одно приложение</string>
     <string name="saved_running">Настройки сохранены. Автозапуск работает в фоне.</string>
     <string name="saved_stopped">Автозапуск выключен.</string>
     <string name="notification_channel">Автозапуск</string>
     <string name="notification_channel_desc">Фоновая служба запуска приложений на магнитоле</string>
     <string name="notification_title">Автозапуск магнитолы</string>
     <string name="notification_text">Готов запустить: %1$s</string>
+    <string name="notification_text_many">Готов запустить приложений: %1$d</string>
     <string name="notification_text_generic">Ожидание пробуждения магнитолы</string>
     <string name="app_icon">Иконка приложения</string>
 </resources>
