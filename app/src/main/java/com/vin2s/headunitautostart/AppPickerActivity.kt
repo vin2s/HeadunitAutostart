@@ -21,17 +21,19 @@ class AppPickerActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { finish() }
 
+        val excluded = intent.getStringArrayListExtra(EXTRA_EXCLUDE)?.toSet().orEmpty()
+
         adapter = AppListAdapter { app ->
-            val prefs = Prefs(this)
-            prefs.targetPackage = app.packageName
-            prefs.targetLabel = app.label
-            setResult(RESULT_OK)
+            val data = Intent()
+                .putExtra(EXTRA_PACKAGE, app.packageName)
+                .putExtra(EXTRA_LABEL, app.label)
+            setResult(RESULT_OK, data)
             finish()
         }
         binding.list.layoutManager = LinearLayoutManager(this)
         binding.list.adapter = adapter
 
-        apps = loadLaunchableApps()
+        apps = loadLaunchableApps().filter { it.packageName !in excluded }
         adapter.submit(apps)
 
         binding.search.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
@@ -63,5 +65,11 @@ class AppPickerActivity : AppCompatActivity() {
                 icon = info.loadIcon(pm)
             )
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+    }
+
+    companion object {
+        const val EXTRA_PACKAGE = "package"
+        const val EXTRA_LABEL = "label"
+        const val EXTRA_EXCLUDE = "exclude"
     }
 }

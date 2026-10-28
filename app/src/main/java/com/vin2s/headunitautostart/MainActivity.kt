@@ -6,21 +6,34 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.vin2s.headunitautostart.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: Prefs
+    private lateinit var adapter: TargetAppsAdapter
 
     private val pickApp = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            bindTarget()
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        val pkg = data.getStringExtra(AppPickerActivity.EXTRA_PACKAGE).orEmpty()
+        val label = data.getStringExtra(AppPickerActivity.EXTRA_LABEL).orEmpty()
+        if (pkg.isBlank()) return@registerForActivityResult
+        val current = adapter.snapshot().toMutableList()
+        if (current.any { it.packageName == pkg }) {
+            Toast.makeText(this, R.string.app_already_added, Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
         }
+        current.add(TargetApp(packageName = pkg, label = label.ifBlank { pkg }))
+        adapter.submit(current)
+        bindEmptyState()
     }
 
     private val notificationPermission = registerForActivityResult(
@@ -33,15 +46,22 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.launchDelay.setText((prefs.launchDelayMs / 1000L).toString())
-        binding.minimizeDelay.setText((prefs.minimizeDelayMs / 1000L).toString())
+        adapter = TargetAppsAdapter { bindEmptyState() }
+        binding.targets.layoutManager = LinearLayoutManager(this)
+        binding.targets.adapter = adapter
+        adapter.submit(prefs.targets)
+        bindEmptyState()
+
         binding.cooldown.setText((prefs.cooldownMs / 1000L).toString())
-        binding.minimize.isChecked = prefs.minimizeAfterLaunch
         binding.enabled.isChecked = prefs.enabled
-        bindTarget()
 
         binding.pickApp.setOnClickListener {
-            pickApp.launch(Intent(this, AppPickerActivity::class.java))
+            val intent = Intent(this, AppPickerActivity::class.java)
+            intent.putStringArrayListExtra(
+                AppPickerActivity.EXTRA_EXCLUDE,
+                ArrayList(adapter.packages())
+            )
+            pickApp.launch(intent)
         }
         binding.save.setOnClickListener { saveAndApply() }
         binding.overlay.setOnClickListener { requestOverlay() }
@@ -54,16 +74,8 @@ class MainActivity : AppCompatActivity() {
         bindPermissionState()
     }
 
-    private fun bindTarget() {
-        val label = prefs.targetLabel
-        val pkg = prefs.targetPackage
-        binding.targetApp.text = if (pkg.isBlank()) {
-            getString(R.string.target_not_selected)
-        } else if (label.isNotBlank()) {
-            getString(R.string.target_selected, label, pkg)
-        } else {
-            pkg
-        }
+    private fun bindEmptyState() {
+        binding.emptyTargets.visibility = if (adapter.itemCount == 0) View.VISIBLE else View.GONE
     }
 
     private fun bindPermissionState() {
@@ -80,16 +92,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveAndApply() {
-        val launchSec = binding.launchDelay.text.toString().toLongOrNull() ?: 3L
-        val minimizeSec = binding.minimizeDelay.text.toString().toLongOrNull() ?: 2L
         val cooldownSec = binding.cooldown.text.toString().toLongOrNull() ?: 60L
-        prefs.launchDelayMs = launchSec.coerceAtLeast(0L) * 1000L
-        prefs.minimizeDelayMs = minimizeSec.coerceAtLeast(0L) * 1000L
         prefs.cooldownMs = cooldownSec.coerceAtLeast(5L) * 1000L
-        prefs.minimizeAfterLaunch = binding.minimize.isChecked
+        prefs.targets = adapter.snapshot()
         prefs.enabled = binding.enabled.isChecked
 
-        if (prefs.enabled && prefs.targetPackage.isBlank()) {
+        if (prefs.enabled && prefs.targets.isEmpty()) {
             prefs.enabled = false
             binding.enabled.isChecked = false
             Toast.makeText(this, R.string.select_app_first, Toast.LENGTH_LONG).show()
@@ -98,7 +106,7 @@ class MainActivity : AppCompatActivity() {
 
         if (prefs.isConfigured) {
             AutostartService.start(this, launchNow = false)
-            Toast.makeText(this, R.string.saved_running, Toast.LENGTH_LONG).show()
+            moveTaskToBack(true)
         } else {
             AutostartService.stop(this)
             Toast.makeText(this, R.string.saved_stopped, Toast.LENGTH_LONG).show()
