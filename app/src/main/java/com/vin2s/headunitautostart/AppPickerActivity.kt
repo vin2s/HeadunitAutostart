@@ -1,7 +1,9 @@
 package com.vin2s.headunitautostart
 
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.SearchView
 import androidx.appcompat.app.AppCompatActivity
@@ -33,7 +35,7 @@ class AppPickerActivity : AppCompatActivity() {
         binding.list.layoutManager = LinearLayoutManager(this)
         binding.list.adapter = adapter
 
-        apps = loadLaunchableApps().filter { it.packageName !in excluded }
+        apps = loadInstalledApps().filter { it.packageName !in excluded }
         adapter.submit(apps)
 
         binding.search.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
@@ -51,20 +53,26 @@ class AppPickerActivity : AppCompatActivity() {
         })
     }
 
-    private fun loadLaunchableApps(): List<InstalledApp> {
+    private fun loadInstalledApps(): List<InstalledApp> {
         val pm = packageManager
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val flags = PackageManager.MATCH_DEFAULT_ONLY
-        val resolved = pm.queryIntentActivities(intent, flags)
-        return resolved.mapNotNull { info ->
-            val appInfo = info.activityInfo?.applicationInfo ?: return@mapNotNull null
-            if (appInfo.packageName == packageName) return@mapNotNull null
+        val installed = installedApplications(pm)
+        return installed.mapNotNull { info ->
+            if (info.packageName == packageName) return@mapNotNull null
             InstalledApp(
                 label = info.loadLabel(pm).toString(),
-                packageName = appInfo.packageName,
+                packageName = info.packageName,
                 icon = info.loadIcon(pm)
             )
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun installedApplications(pm: PackageManager): List<ApplicationInfo> {
+        return if (Build.VERSION.SDK_INT >= 33) {
+            pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
+        } else {
+            pm.getInstalledApplications(0)
+        }
     }
 
     companion object {
